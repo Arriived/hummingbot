@@ -11,13 +11,31 @@ permissions:
 
 jobs:
   signing:
-    name: Signing tests with native LimitOrder
+    name: ${{ matrix.target }} signing tests with native LimitOrder
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: Fork PR
+            ref: ''
+          - target: Upstream development candidate
+            ref: '43cb26565bfc475d7eea803b27821eadfd424376'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Preserve focused coverage configuration
+        run: cp .github/ci/hyperliquid-coverage.ini "$RUNNER_TEMP/hyperliquid-coverage.ini"
+      - name: Check out the exact upstream candidate
+        if: matrix.ref != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - name: Record tested source commit
+        run: git log -1 --format='%H %s'
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
@@ -52,6 +70,7 @@ jobs:
         run: |
           python - <<'PY'
           import asyncio
+          import os
           from decimal import Decimal
           import pytest
           from hummingbot.core.data_type.limit_order import LimitOrder
@@ -63,7 +82,7 @@ jobs:
               "test/hummingbot/connector/derivative/hyperliquid_perpetual/test_hyperliquid_perpetual_auth.py",
               "-q",
               "--cov=hummingbot.connector.derivative.hyperliquid_perpetual.hyperliquid_perpetual_auth",
-              "--cov-config=.github/ci/hyperliquid-coverage.ini",
+              "--cov-config=" + os.path.join(os.environ["RUNNER_TEMP"], "hyperliquid-coverage.ini"),
               "--cov-report=term-missing",
           ]))
           PY
