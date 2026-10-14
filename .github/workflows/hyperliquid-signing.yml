@@ -1,0 +1,68 @@
+name: Hyperliquid signing regression
+
+on:
+  push:
+    branches: [codex/fix-audit-bugs]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signing:
+    name: Signing tests with native LimitOrder
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install isolated signing-test dependencies
+        run: |
+          python -m pip install \
+            setuptools==80.9.0 Cython==3.0.12 numpy==2.5.4 pandas==3.0.6 \
+            eth-account==0.14.0 msgpack==1.2.3 aiohttp==3.14.5 \
+            async-timeout==4.0.3 bidict==0.24.1 ujson==6.0.0 \
+            PyYAML==6.0.3 cachetools==7.2.1 \
+            pytest==9.1.1 pytest-asyncio==1.4.0 pytest-timeout==2.4.0 pytest-cov==7.0.0
+          python -m pip freeze
+      - name: Build the real native import dependency
+        run: |
+          python - <<'PY'
+          from Cython.Build import cythonize
+          from setuptools import setup
+
+          # This focused job builds LimitOrder, not the full Hummingbot extension set.
+          # No module or type is replaced by a test placeholder.
+          setup(
+              name="hyperliquid-signing-native-dependency",
+              packages=[],
+              ext_modules=cythonize(
+                  ["hummingbot/core/data_type/limit_order.pyx"],
+                  compiler_directives={"language_level": 3, "annotation_typing": False},
+              ),
+              script_args=["build_ext", "--inplace"],
+          )
+          PY
+      - name: Verify native import and run signing tests
+        run: |
+          python - <<'PY'
+          import asyncio
+          from decimal import Decimal
+          import pytest
+          from hummingbot.core.data_type.limit_order import LimitOrder
+
+          order = LimitOrder("test", "ETH-USDT", True, "ETH", "USDT", Decimal("1"), Decimal("2"))
+          assert order.quantity == Decimal("2")
+          asyncio.set_event_loop(asyncio.new_event_loop())
+          raise SystemExit(pytest.main([
+              "test/hummingbot/connector/derivative/hyperliquid_perpetual/test_hyperliquid_perpetual_auth.py",
+              "-q",
+              "--cov=hummingbot.connector.derivative.hyperliquid_perpetual.hyperliquid_perpetual_auth",
+              "--cov-report=term-missing",
+          ]))
+          PY
