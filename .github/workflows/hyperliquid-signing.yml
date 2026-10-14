@@ -63,6 +63,7 @@ jobs:
               "test/hummingbot/connector/derivative/hyperliquid_perpetual/test_hyperliquid_perpetual_auth.py",
               "-q",
               "--cov=hummingbot.connector.derivative.hyperliquid_perpetual.hyperliquid_perpetual_auth",
+              "--cov-config=.github/ci/hyperliquid-coverage.ini",
               "--cov-report=term-missing",
           ]))
           PY
